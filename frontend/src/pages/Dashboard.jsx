@@ -8,7 +8,7 @@ import {
     Layout, TrendingUp, Users, Shield, Globe, Plus,
     CheckCircle2, Activity, Clock, MoreVertical, Calendar,
     ChevronRight, Link as LinkIcon, Copy, Filter,
-    LayoutDashboard, KeyRound, Eye, Settings, Trash2, Briefcase, X
+    LayoutDashboard, KeyRound, Eye, Settings, Trash2, Briefcase, X, Folder
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { fadeIn, fadeInUp, staggerContainer } from '../utils/animations';
@@ -16,11 +16,10 @@ import ProjectDetailsModal from '../components/ProjectDetailsModal';
 import ProjectCard from '../components/ProjectCard';
 import ActivityChart from '../components/charts/ActivityChart';
 import ProjectDistributionChart from '../components/charts/ProjectDistributionChart';
-import ContributionHeatmap from '../components/charts/ContributionHeatmap';
 
 
 const Dashboard = () => {
-    const { projects, addProject, employees, deleteProject, searchQuery } = useProjects();
+    const { projects, addProject, employees, deleteProject, searchQuery, joinProjectByLink } = useProjects();
     const { user, getToken } = useAuth();
     const { addToast } = useToast();
     const navigate = useNavigate();
@@ -74,16 +73,29 @@ const Dashboard = () => {
         };
     }, [activeMenuProject]);
 
-    const [newProject, setNewProject] = useState({ name: '', description: '', deadline: '', priority: 'Medium', assignedTo: [] });
+    const [newProject, setNewProject] = useState({ name: '', description: '', deadline: '', priority: 'Medium', assignedTo: [], workspaceEnabled: true, initialTask: '' });
     const [inviteLink, setInviteLink] = useState('');
 
-    const handleAddProject = (e) => {
+    const handleAddProject = async (e) => {
         e.preventDefault();
         if (!newProject.name) return;
-        addProject(newProject);
-        addToast('Project created successfully!', 'success');
-        setNewProject({ name: '', description: '', deadline: '', priority: 'Medium', assignedTo: [] });
-        setIsModalOpen(false);
+
+        const projectToAdd = { ...newProject };
+        if (projectToAdd.initialTask) {
+            projectToAdd.tasks = [{ id: Date.now(), text: projectToAdd.initialTask, priority: 'Medium', completed: false, subtasks: [] }];
+        }
+        delete projectToAdd.initialTask;
+
+        addToast('Creating project...', 'info');
+        const success = await addProject(projectToAdd);
+
+        if (success) {
+            addToast('Project created successfully!', 'success');
+            setNewProject({ name: '', description: '', deadline: '', priority: 'Medium', assignedTo: [], workspaceEnabled: true, initialTask: '' });
+            setIsModalOpen(false);
+        } else {
+            addToast('Failed to create project.', 'error');
+        }
     }
 
     const toggleEmployeeSelection = (employee) => {
@@ -112,46 +124,72 @@ const Dashboard = () => {
         addToast('Link copied to clipboard', 'success');
     };
 
-    const handleJoinByLink = (e) => {
+    const handleJoinByLink = async (e) => {
         e.preventDefault();
         if (!joinLink) return;
-        addToast('Joining project...', 'info');
-        setTimeout(() => {
-            addToast('Successfully joined project!', 'success');
-            setIsJoinLinkModalOpen(false);
-            setJoinLink('');
-        }, 1500);
+
+        try {
+            // Looking for invite codes in any URL format, or just a raw code
+            const urlParts = joinLink.split('/invite/');
+            const tokenToJoin = urlParts.length > 1 ? urlParts[1].split('/')[0] : joinLink.trim();
+
+            if (!tokenToJoin) {
+                addToast('An Invite Link or Code is required.', 'error');
+                return;
+            }
+
+            addToast('Joining project...', 'info');
+
+            const result = await joinProjectByLink(tokenToJoin);
+            if (result.success) {
+                addToast(result.message, 'success');
+                setIsJoinLinkModalOpen(false);
+                setJoinLink('');
+                setJoinPassword('');
+            } else {
+                addToast(result.message, 'error');
+            }
+
+        } catch (error) {
+            console.error("Error joining project:", error);
+            addToast('An error occurred.', 'error');
+        }
     };
 
-    const handleJoinById = (e) => {
+    const handleJoinById = async (e) => {
         e.preventDefault();
-        if (!joinId || !joinPassword) return;
-        addToast('Verifying credentials...', 'info');
-        setTimeout(() => {
-            addToast('Successfully joined project!', 'success');
+        if (!joinId) {
+            addToast('A Project Invite Token is required.', 'error');
+            return;
+        }
+
+        addToast('Verifying Token...', 'info');
+        const result = await joinProjectByLink(joinId);
+
+        if (result.success) {
+            addToast(result.message, 'success');
             setIsJoinIdModalOpen(false);
             setJoinId('');
             setJoinPassword('');
-        }, 1500);
+        } else {
+            addToast(result.message, 'error');
+        }
     };
 
     const priorityOrder = { 'High': 1, 'Medium': 2, 'Low': 3 };
 
-    const filteredProjects = Array.isArray(projects) ? projects.filter(project =>
-        (project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            project.description.toLowerCase().includes(searchQuery.toLowerCase())) &&
-        project.progress < 100 // Exclude completed projects for the "Active Projects" view
-    ).sort((a, b) => {
-        const priorityA = priorityOrder[a.priority] || 4;
-        const priorityB = priorityOrder[b.priority] || 4;
+    const filteredProjects = Array.isArray(projects) ? projects.filter(project => {
+        const nameMatch = (project?.name || "").toLowerCase().includes(searchQuery.toLowerCase());
+        const descMatch = (project?.description || "").toLowerCase().includes(searchQuery.toLowerCase());
+        const isNotComplete = (project?.progress || 0) < 100;
+        return (nameMatch || descMatch) && isNotComplete;
+    }).sort((a, b) => {
+        const priorityA = priorityOrder[a?.priority] || 4;
+        const priorityB = priorityOrder[b?.priority] || 4;
         return priorityA - priorityB;
     }) : [];
 
-    const completedProjects = Array.isArray(projects) ? projects.filter(project =>
-        (project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            project.description.toLowerCase().includes(searchQuery.toLowerCase())) &&
-        project.progress === 100
-    ).sort((a, b) => new Date(b.deadline) - new Date(a.deadline)) : [];
+
 
     // Stats Calculation
     const statsData = {
@@ -314,13 +352,13 @@ const Dashboard = () => {
                 <div className="space-y-6">
                     <div className="flex justify-between items-center px-1">
                         <h3 className="font-bold text-xl text-slate-900 flex items-center gap-2">
-                            <Globe size={20} className="text-primary-600" />
+                            <Globe size={20} className="text-secondary-600" />
                             Active Projects
                         </h3>
                         <motion.button
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.95 }}
-                            onClick={() => navigate('/workspaces')}
+                            onClick={() => navigate('/projects')}
                             className="text-sm text-primary-600 font-bold hover:text-primary-700 flex items-center gap-1 group bg-primary-50 px-3 py-1.5 rounded-lg hover:bg-primary-100 transition-colors"
                         >
                             View all <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" />
@@ -337,32 +375,16 @@ const Dashboard = () => {
                                 />
                             ))}
                         </AnimatePresence>
+                        {filteredProjects.length === 0 && (
+                            <div className="col-span-full py-12 flex flex-col items-center justify-center text-slate-400 bg-white/50 rounded-3xl border border-dashed border-slate-200">
+                                <Folder size={48} className="mb-4 opacity-50" />
+                                <p className="font-medium text-lg">No active projects found</p>
+                                <p className="text-sm">Click "New Project" to get started.</p>
+                            </div>
+                        )}
                     </div>
                 </div>
 
-                {/* Completed Projects */}
-                {completedProjects.length > 0 && (
-                    <div className="space-y-6 mt-12">
-                        <div className="flex justify-between items-center px-1">
-                            <h3 className="font-bold text-xl text-slate-900 flex items-center gap-2">
-                                <CheckCircle2 size={20} className="text-emerald-600" />
-                                Completed Projects
-                            </h3>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                            <AnimatePresence>
-                                {completedProjects.map((project) => (
-                                    <ProjectCard
-                                        key={project.id}
-                                        project={project}
-                                        onClick={() => setSelectedProject(project)}
-                                    />
-                                ))}
-                            </AnimatePresence>
-                        </div>
-                    </div>
-                )}
             </div>
 
             {/* Modal for new project */}
@@ -400,131 +422,162 @@ const Dashboard = () => {
                                 </motion.button>
                             </div>
 
-                            <form onSubmit={handleAddProject} className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                <div className="space-y-5">
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-bold text-slate-700 ml-1">Project Name</label>
-                                        <input
-                                            type="text"
-                                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all outline-none font-medium"
-                                            placeholder="e.g. Website Redesign"
-                                            value={newProject.name}
-                                            onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
-                                            required
-                                            autoFocus
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-bold text-slate-700 ml-1">Description</label>
-                                        <textarea
-                                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all outline-none font-medium min-h-[120px] resize-none"
-                                            placeholder="Briefly describe the goals..."
-                                            value={newProject.description}
-                                            onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
-                                        />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-5">
-                                        <div className="space-y-2">
-                                            <label className="text-sm font-bold text-slate-700 ml-1">Deadline</label>
-                                            <input
-                                                type="date"
-                                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all outline-none font-medium"
-                                                value={newProject.deadline}
-                                                onChange={(e) => setNewProject({ ...newProject, deadline: e.target.value })}
-                                                required
-                                            />
+                            <form onSubmit={handleAddProject} className="flex flex-col gap-8">
+                                {/* Core Details Section */}
+                                <div className="space-y-6">
+                                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">Core Details</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="space-y-6">
+                                            <div className="space-y-2">
+                                                <label className="text-sm font-bold text-slate-700 ml-1">Project Name</label>
+                                                <input
+                                                    type="text"
+                                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all outline-none font-medium"
+                                                    placeholder="e.g. Website Redesign"
+                                                    value={newProject.name}
+                                                    onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+                                                    required
+                                                    autoFocus
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-sm font-bold text-slate-700 ml-1">Description</label>
+                                                <textarea
+                                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all outline-none font-medium min-h-[110px] resize-none"
+                                                    placeholder="Briefly describe the goals..."
+                                                    value={newProject.description}
+                                                    onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
+                                                />
+                                            </div>
                                         </div>
-                                        <div className="space-y-2">
-                                            <label className="text-sm font-bold text-slate-700 ml-1">Priority</label>
-                                            <select
-                                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all outline-none font-medium cursor-pointer"
-                                                value={newProject.priority}
-                                                onChange={(e) => setNewProject({ ...newProject, priority: e.target.value })}
-                                            >
-                                                <option value="Low">Low Priority</option>
-                                                <option value="Medium">Medium Priority</option>
-                                                <option value="High">High Priority</option>
-                                            </select>
+
+                                        <div className="space-y-6">
+                                            <div className="space-y-2">
+                                                <label className="text-sm font-bold text-slate-700 ml-1">Deadline</label>
+                                                <input
+                                                    type="date"
+                                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all outline-none font-medium"
+                                                    value={newProject.deadline}
+                                                    onChange={(e) => setNewProject({ ...newProject, deadline: e.target.value })}
+                                                    required
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-sm font-bold text-slate-700 ml-1">Priority</label>
+                                                <select
+                                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all outline-none font-medium cursor-pointer"
+                                                    value={newProject.priority}
+                                                    onChange={(e) => setNewProject({ ...newProject, priority: e.target.value })}
+                                                >
+                                                    <option value="Low">Low Priority</option>
+                                                    <option value="Medium">Medium Priority</option>
+                                                    <option value="High">High Priority</option>
+                                                </select>
+                                            </div>
+
+
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="space-y-6 flex flex-col">
-                                    <div className="space-y-2 flex-1">
-                                        <label className="text-sm font-bold text-slate-700 ml-1">Assign Members</label>
-                                        <div className="grid grid-cols-2 gap-2 max-h-[220px] overflow-y-auto pr-2 custom-scrollbar">
-                                            {employees.map(emp => (
-                                                <div
-                                                    key={emp.id}
-                                                    onClick={() => toggleEmployeeSelection(emp)}
-                                                    className={`flex items-center p-2 rounded-xl cursor-pointer border transition-all ${newProject.assignedTo.some(e => e.id === emp.id)
-                                                        ? 'bg-slate-900 text-white border-slate-900'
-                                                        : 'bg-white border-slate-200 hover:bg-slate-50'
-                                                        }`}
-                                                >
-                                                    <img src={emp.avatar} alt={emp.name} className="w-8 h-8 rounded-full mr-2 bg-gray-200" />
-                                                    <span className={`text-sm font-bold truncate ${newProject.assignedTo.some(e => e.id === emp.id) ? 'text-white' : 'text-slate-700'}`}>{emp.name}</span>
-                                                    {newProject.assignedTo.some(e => e.id === emp.id) && (
-                                                        <CheckCircle2 size={16} className="ml-auto text-white" />
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
+                                {/* Project Settings Section */}
+                                <div className="space-y-6 pt-6 border-t border-slate-100">
+                                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">Project Preferences</h3>
 
-                                    <div className="pt-4 border-t border-slate-100 mt-auto">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                                <LinkIcon size={16} />
-                                                Invite via Link
-                                            </label>
-                                            {!inviteLink && (
-                                                <button
-                                                    type="button"
-                                                    onClick={generateInviteLink}
-                                                    className="text-xs text-primary-600 font-bold hover:underline"
-                                                >
-                                                    Generate Link
-                                                </button>
-                                            )}
-                                        </div>
-
-                                        {inviteLink && (
-                                            <div className="flex gap-2">
-                                                <div className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-500 truncate font-mono">
-                                                    {inviteLink}
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={copyInviteLink}
-                                                    className="p-2 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 transition-colors"
-                                                    title="Copy Link"
-                                                >
-                                                    <Copy size={16} />
-                                                </button>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        {/* Workspace Toggle */}
+                                        <div className="flex items-center justify-between p-5 bg-slate-50 border border-slate-200 rounded-2xl hidden md:flex h-full">
+                                            <div>
+                                                <h4 className="text-sm font-bold text-slate-900 mb-1">Enable Workspace</h4>
+                                                <p className="text-xs text-slate-500 leading-relaxed max-w-[200px]">Create an isolated environment for this project.</p>
                                             </div>
-                                        )}
+                                            <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
+                                                <input
+                                                    type="checkbox"
+                                                    value=""
+                                                    className="sr-only peer"
+                                                    checked={newProject.workspaceEnabled}
+                                                    onChange={(e) => setNewProject({ ...newProject, workspaceEnabled: e.target.checked })}
+                                                />
+                                                <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                                            </label>
+                                        </div>
+
+                                        {/* Mobile Workspace Toggle (Vertical display) */}
+                                        <div className="flex items-center justify-between p-5 bg-slate-50 border border-slate-200 rounded-2xl md:hidden">
+                                            <div>
+                                                <h4 className="text-sm font-bold text-slate-900 mb-1">Enable Workspace</h4>
+                                                <p className="text-xs text-slate-500">Create an isolated environment.</p>
+                                            </div>
+                                            <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
+                                                <input
+                                                    type="checkbox"
+                                                    value=""
+                                                    className="sr-only peer"
+                                                    checked={newProject.workspaceEnabled}
+                                                    onChange={(e) => setNewProject({ ...newProject, workspaceEnabled: e.target.checked })}
+                                                />
+                                                <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                                            </label>
+                                        </div>
+
+                                        {/* Security Information Area */}
+                                        <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col justify-center gap-3">
+                                            <div className="flex items-center gap-2">
+                                                <KeyRound size={16} className="text-slate-400" />
+                                                <h4 className="text-sm font-bold text-slate-900">Project Security</h4>
+                                            </div>
+                                            <p className="text-xs text-slate-500">
+                                                A unique secure <b>Invite Link</b> will be generated for you once this project is created, allowing you to quickly share access with your team!
+                                            </p>
+                                        </div>
                                     </div>
 
-                                    <div className="flex justify-end gap-3 pt-2">
-                                        <motion.button
-                                            whileHover={{ scale: 1.05 }}
-                                            whileTap={{ scale: 0.95 }}
-                                            type="button"
-                                            onClick={() => setIsModalOpen(false)}
-                                            className="px-6 py-3 text-slate-600 font-bold hover:bg-slate-50 rounded-xl transition-colors"
-                                        >
-                                            Cancel
-                                        </motion.button>
-                                        <motion.button
-                                            whileHover={{ scale: 1.05 }}
-                                            whileTap={{ scale: 0.95 }}
-                                            type="submit"
-                                            className="bg-primary-600 text-white font-bold px-8 py-3 rounded-xl shadow-lg shadow-primary-600/20 hover:bg-primary-700 hover:shadow-xl hover:shadow-primary-600/30 transition-all font-medium"
-                                        >
-                                            Create Project
-                                        </motion.button>
-                                    </div>
+                                    {/* Keep Assign Members handling in case employees are ever added back */}
+                                    {employees.length > 0 && (
+                                        <div className="space-y-2 pt-4">
+                                            <label className="text-sm font-bold text-slate-700 ml-1">Assign Initial Members</label>
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 max-h-[120px] overflow-y-auto pr-2 custom-scrollbar">
+                                                {employees.map(emp => (
+                                                    <div
+                                                        key={emp.id}
+                                                        onClick={() => toggleEmployeeSelection(emp)}
+                                                        className={`flex items-center p-2 rounded-xl cursor-pointer border transition-all ${newProject.assignedTo.some(e => e.id === emp.id)
+                                                            ? 'bg-slate-900 text-white border-slate-900'
+                                                            : 'bg-white border-slate-200 hover:bg-slate-50'
+                                                            }`}
+                                                    >
+                                                        <img src={emp.avatar} alt={emp.name} className="w-6 h-6 rounded-full mr-2 bg-gray-200" />
+                                                        <span className={`text-xs font-bold truncate ${newProject.assignedTo.some(e => e.id === emp.id) ? 'text-white' : 'text-slate-700'}`}>{emp.name}</span>
+                                                        {newProject.assignedTo.some(e => e.id === emp.id) && (
+                                                            <CheckCircle2 size={14} className="ml-auto text-white" />
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Bottom Action Buttons */}
+                                <div className="pt-6 border-t border-slate-100 flex justify-end gap-3 w-full">
+                                    <motion.button
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
+                                        type="button"
+                                        onClick={() => setIsModalOpen(false)}
+                                        className="px-6 py-3 text-slate-600 font-bold hover:bg-slate-50 rounded-xl transition-colors"
+                                    >
+                                        Cancel
+                                    </motion.button>
+                                    <motion.button
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
+                                        type="submit"
+                                        className="bg-primary-600 text-white font-bold px-8 py-3 rounded-xl shadow-lg shadow-primary-600/20 hover:bg-primary-700 hover:shadow-xl hover:shadow-primary-600/30 transition-all font-medium"
+                                    >
+                                        Create Project
+                                    </motion.button>
                                 </div>
                             </form>
                         </motion.div>
@@ -562,11 +615,11 @@ const Dashboard = () => {
                             </div>
                             <form onSubmit={handleJoinByLink} className="space-y-6">
                                 <div className="space-y-2">
-                                    <label className="text-sm font-bold text-slate-700 ml-1">Invite Link</label>
+                                    <label className="text-sm font-bold text-slate-700 ml-1">Invite Link or Token</label>
                                     <input
-                                        type="url"
+                                        type="text"
                                         className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all outline-none font-medium"
-                                        placeholder="https://..."
+                                        placeholder="e.g. https://domain.com/invite/xyz123 or xyz123"
                                         value={joinLink}
                                         onChange={(e) => setJoinLink(e.target.value)}
                                         required
@@ -628,11 +681,11 @@ const Dashboard = () => {
                             </div>
                             <form onSubmit={handleJoinById} className="space-y-6">
                                 <div className="space-y-2">
-                                    <label className="text-sm font-bold text-slate-700 ml-1">Project ID</label>
+                                    <label className="text-sm font-bold text-slate-700 ml-1">Join Code</label>
                                     <input
                                         type="text"
                                         className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all outline-none font-medium"
-                                        placeholder="e.g. 12345"
+                                        placeholder="e.g. A1B2C3"
                                         value={joinId}
                                         onChange={(e) => setJoinId(e.target.value)}
                                         required
@@ -674,19 +727,6 @@ const Dashboard = () => {
                     </div>
                 )
             }
-
-            {/* Activity Consistency Heatmap - PLACED AT BOTTOM */}
-            <div className="px-4 sm:p-8 pt-0 pb-10">
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.2 }}
-                >
-                    <ContributionHeatmap />
-                </motion.div>
-            </div>
-
-
 
             {/* Project Details Modal with Morphing Animation */}
             <AnimatePresence>

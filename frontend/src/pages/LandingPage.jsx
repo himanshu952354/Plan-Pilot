@@ -281,6 +281,17 @@ const LandingPage = () => {
                                 </motion.div>
                             </ThreeDTilt>
                         </motion.div>
+
+                        <motion.p
+                            initial="hidden"
+                            whileInView="visible"
+                            viewport={{ once: true }}
+                            variants={fadeInUp}
+                            className="mt-12 max-w-2xl mx-auto text-lg text-slate-500 leading-relaxed"
+                        >
+                            A high-performance interface designed for clarity. Real-time insights and seamless task management to keep your team productive.
+                        </motion.p>
+
                     </div>
                 </div>
 

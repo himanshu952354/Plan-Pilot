@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjects } from '../context/ProjectContext';
 import { useToast } from '../context/ToastContext';
-import { Calendar, Flag, Users, CheckCircle2, Clock, Activity, Plus, X, ChevronRight } from 'lucide-react';
+import { Calendar, Flag, Users, CheckCircle2, Clock, Activity, Plus, X, ChevronRight, Link as LinkIcon, Copy } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const ProjectDetailsModal = ({ projectId, onClose }) => {
@@ -29,6 +29,12 @@ const ProjectDetailsModal = ({ projectId, onClose }) => {
         addToast('Task added to project', 'success');
         setNewTaskText('');
         setNewTaskPriority('Medium');
+    };
+
+    const copyInviteLink = () => {
+        const link = `${window.location.origin}/invite/${project.joinToken || project.id}`;
+        navigator.clipboard.writeText(link);
+        addToast('Invite link copied!', 'success');
     };
 
     const getPriorityColor = (priority) => {
@@ -96,14 +102,28 @@ const ProjectDetailsModal = ({ projectId, onClose }) => {
                                 Created on {new Date().toLocaleDateString()}
                             </p>
                         </div>
-                        <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => navigate(`/project/${project.id}`)}
-                            className="btn btn-primary shadow-lg shadow-primary-500/30 animate-pulse hidden md:block" // Hidden on mobile to save space? Or just block
-                        >
-                            Enter Workspace
-                        </motion.button>
+                        <div className="flex flex-col sm:flex-row gap-3 mt-4 md:mt-0">
+                            <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={copyInviteLink}
+                                className="btn bg-white text-slate-600 border border-slate-200 px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:text-primary-600 transition-colors flex items-center justify-center gap-2"
+                            >
+                                <LinkIcon size={16} />
+                                Invite Link
+                            </motion.button>
+                            {project.workspaceEnabled !== false && (
+                                <motion.button
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={() => navigate(`/project/${project.id}`)}
+                                    className="btn btn-primary shadow-lg shadow-primary-500/30 w-full sm:w-auto px-6 py-2 rounded-xl font-bold bg-primary-600 text-white hover:bg-primary-700 transition-all flex items-center justify-center gap-2"
+                                >
+                                    Enter Workspace
+                                    <ChevronRight size={16} />
+                                </motion.button>
+                            )}
+                        </div>
                     </div>
                 </div>
 
@@ -115,9 +135,50 @@ const ProjectDetailsModal = ({ projectId, onClose }) => {
                             <Flag size={20} className="text-primary-600" />
                             Project Overview
                         </h2>
-                        <p className="text-slate-600 leading-relaxed text-lg">
+                        <p className="text-slate-600 leading-relaxed text-lg mb-6">
                             {project.description || "No description provided for this project."}
                         </p>
+
+                        {/* Project Team and Security Section */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                            {/* Team */}
+                            {project.assignedTo && project.assignedTo.length > 0 && (
+                                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 h-full">
+                                    <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3">Project Team</h3>
+                                    <div className="flex flex-wrap gap-2">
+                                        {project.assignedTo.map((user, idx) => (
+                                            <div key={user.id || idx} className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-full border border-slate-200 shadow-sm">
+                                                <img
+                                                    src={user.avatar || `https://ui-avatars.com/api/?name=${user.name}&background=random`}
+                                                    alt={user.name}
+                                                    className="w-6 h-6 rounded-full object-cover"
+                                                />
+                                                <span className="text-xs font-bold text-slate-700">{user.name}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Security / Invite Area */}
+                            {/* Security / Invite Area */}
+                            {project.joinToken && (
+                                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 h-full flex flex-col justify-center">
+                                    <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-2">
+                                        <Copy size={16} className="text-slate-400" />
+                                        Share & Invite
+                                    </h3>
+                                    <div className="flex flex-col gap-3">
+                                        <div className="flex justify-between items-center bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-sm cursor-pointer hover:border-primary-300 transition-colors"
+                                            onClick={copyInviteLink}
+                                            title="Copy Invite Link">
+                                            <span className="text-xs font-bold text-slate-500 uppercase">Invite Link</span>
+                                            <span className="text-sm font-mono font-bold text-primary-600 truncate ml-2">.../invite/{project.joinToken.substring(0, 8)}...</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
 
                         {/* Quick Add Mini Task */}
                         <div className="mt-6">
@@ -173,27 +234,29 @@ const ProjectDetailsModal = ({ projectId, onClose }) => {
                                 <div
                                     key={task.id}
                                     onClick={() => toggleTask(project.id, task.id)}
-                                    className={`group flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer ${task.completed
+                                    className={`group flex items-center justify-between gap-3 p-3 rounded-xl border transition-all cursor-pointer ${task.completed
                                         ? 'bg-slate-50 border-slate-200 opacity-75'
                                         : 'bg-white border-slate-100 hover:border-primary-200 hover:shadow-sm'
                                         }`}
                                 >
-                                    <div className={`
-                                        w-5 h-5 rounded-md border flex items-center justify-center transition-colors
-                                        ${task.completed ? 'bg-primary-500 border-primary-500' : 'border-slate-300 group-hover:border-primary-400'}
-                                    `}>
-                                        {task.completed && <CheckCircle2 size={12} className="text-white" />}
+                                    <div className="flex items-center gap-3 flex-1">
+                                        <div className={`
+                                            w-5 h-5 rounded-md border flex items-center justify-center transition-colors shrink-0
+                                            ${task.completed ? 'bg-primary-500 border-primary-500' : 'border-slate-300 group-hover:border-primary-400'}
+                                        `}>
+                                            {task.completed && <CheckCircle2 size={12} className="text-white" />}
+                                        </div>
+                                        <span className={`text-sm font-medium transition-all line-clamp-2 ${task.completed ? 'text-slate-400 line-through' : 'text-slate-700'
+                                            }`}>
+                                            {task.text}
+                                        </span>
                                     </div>
-                                    <span className={`text-sm font-medium transition-all flex-1 ${task.completed ? 'text-slate-400 line-through' : 'text-slate-700'
-                                        }`}>
-                                        {task.text}
-                                    </span>
 
                                     <div className={`
-                                        p-1 rounded-md 
-                                        ${task.priority === 'High' ? 'bg-rose-50 text-rose-500' :
-                                            task.priority === 'Medium' ? 'bg-amber-50 text-amber-500' :
-                                                'bg-emerald-50 text-emerald-500'}
+                                        shrink-0 p-1.5 rounded-lg border
+                                        ${task.priority === 'High' ? 'bg-rose-50 text-rose-500 border-rose-100' :
+                                            task.priority === 'Medium' ? 'bg-amber-50 text-amber-500 border-amber-100' :
+                                                'bg-emerald-50 text-emerald-500 border-emerald-100'}
                                     `} title={`Priority: ${task.priority}`}>
                                         <Flag size={14} fill="currentColor" />
                                     </div>

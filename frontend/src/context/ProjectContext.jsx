@@ -1,156 +1,251 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { useAuth } from './AuthContext';
+import { io } from 'socket.io-client';
 
 const ProjectContext = createContext();
 
 export const useProjects = () => useContext(ProjectContext);
 
 export const ProjectProvider = ({ children }) => {
+    const { user, loading, getToken } = useAuth();
     const [projects, setProjects] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
+    const socket = useRef(null);
 
+    // Initialize Socket
     useEffect(() => {
-        const storedProjects = localStorage.getItem('projects');
-        if (storedProjects) {
-            setProjects(JSON.parse(storedProjects));
-        } else {
-            // Initialize with some dummy data if empty
-            const dummyProjects = [
-                {
-                    id: 1,
-                    name: "Website Redesign",
-                    description: "Overhaul the company website with new branding.",
-                    progress: 45,
-                    priority: "High",
-                    deadline: "2026-03-15",
-                    tasks: [
-                        {
-                            id: 1,
-                            text: "Design Mockups",
-                            completed: true,
-                            priority: "High",
-                            deadline: "2026-02-20",
-                            subtasks: [
-                                { id: 101, text: "Homepage Sketch", completed: true },
-                                { id: 102, text: "About Page Sketch", completed: true },
-                            ]
-                        },
-                        {
-                            id: 2,
-                            text: "Develop Homepage",
-                            completed: false,
-                            priority: "Medium",
-                            deadline: "2026-02-28",
-                            subtasks: []
-                        },
-                        {
-                            id: 3,
-                            text: "Mobile Responsiveness",
-                            completed: false,
-                            priority: "Low",
-                            deadline: "2026-03-05",
-                            subtasks: []
-                        },
-                    ]
-                },
-                {
-                    id: 2,
-                    name: "Mobile App Development",
-                    description: "Create a cross-platform mobile app for customers.",
-                    progress: 20,
-                    priority: "High",
-                    deadline: "2026-04-01",
-                    tasks: [
-                        { id: 2, text: "Authentication Flow", completed: false, priority: "High", deadline: "2026-02-25", subtasks: [] },
-                    ],
-                    chat: [
-                        { id: 1, senderId: 1, text: "Hey everyone, let's aim for the alpha release by Friday.", timestamp: "2026-02-15T09:00:00" },
-                        { id: 2, senderId: 2, text: "Sure, frontend is almost ready.", timestamp: "2026-02-15T09:05:00" }
-                    ]
-                }
-            ];
-            setProjects(dummyProjects);
-            localStorage.setItem('projects', JSON.stringify(dummyProjects));
-        }
+        console.log('🔌 Initializing Socket.io connection to http://localhost:3000');
+        socket.current = io("http://localhost:3000", {
+            reconnectionAttempts: 10,
+            transports: ['polling', 'websocket']
+        });
+
+        socket.current.on('new-message', (data) => {
+            const { projectId, message } = data;
+            console.log(`📡 Real-time message received for project: ${projectId}`, message);
+
+            // Ensure ID comparison is robust (handle string vs number)
+            const targetId = Number(projectId);
+
+            setProjects(prev => {
+                const updatedProjects = prev.map(p => {
+                    if (Number(p.id) === targetId) {
+                        const currentChat = p.chat || [];
+                        const isDuplicate = currentChat.some(m =>
+                            m.id === message.id ||
+                            (m.timestamp === message.timestamp && m.text === message.text && m.senderId === message.senderId)
+                        );
+
+                        if (!isDuplicate) {
+                            console.log(`✅ Appending message to project ${targetId}`);
+                            return { ...p, chat: [...currentChat, message] };
+                        } else {
+                            console.log(`⏭️ Skipping duplicate message for project ${targetId}`);
+                        }
+                    }
+                    return p;
+                });
+                return updatedProjects;
+            });
+        });
+
+        socket.current.on('joined-room', (data) => {
+            console.log(`✅ Server confirmed joining room: ${data.room}`);
+        });
+
+        socket.current.on('connect', () => {
+            console.log('✅ Socket connected successfully. ID:', socket.current.id);
+            // Test ping
+            socket.current.emit('ping-test');
+        });
+
+        socket.current.on('pong-test', (data) => {
+            console.log('🏓 Pong received from server at:', data.time);
+        });
+
+        socket.current.on('connect_error', (error) => {
+            console.error('❌ Socket connection error:', error);
+        });
+
+        return () => {
+            if (socket.current) socket.current.disconnect();
+        };
     }, []);
 
-    const [employees] = useState([
-        { id: 1, name: 'Alice Johnson', role: 'UX Designer', avatar: 'https://ui-avatars.com/api/?name=Alice+Johnson&background=random' },
-        { id: 2, name: 'Bob Smith', role: 'Frontend Dev', avatar: 'https://ui-avatars.com/api/?name=Bob+Smith&background=random' },
-        { id: 3, name: 'Charlie Brown', role: 'Project Manager', avatar: 'https://ui-avatars.com/api/?name=Charlie+Brown&background=random' },
-        { id: 4, name: 'Diana Prince', role: 'Backend Dev', avatar: 'https://ui-avatars.com/api/?name=Diana+Prince&background=random' },
-        { id: 5, name: 'Ethan Hunt', role: 'Security Specialist', avatar: 'https://ui-avatars.com/api/?name=Ethan+Hunt&background=random' },
-    ]);
-
-    const addProject = (project) => {
-        const newProjects = [...projects, { ...project, id: Date.now(), progress: 0, tasks: [], chat: [] }];
-        setProjects(newProjects);
-        localStorage.setItem('projects', JSON.stringify(newProjects));
-    };
-
-    const deleteProject = (projectId) => {
-        const updatedProjects = projects.filter(p => p.id !== projectId);
-        setProjects(updatedProjects);
-        localStorage.setItem('projects', JSON.stringify(updatedProjects));
-    };
-
-    const addTask = (projectId, task) => {
-        const updatedProjects = projects.map(p => {
-            if (p.id === projectId) {
-                return {
-                    ...p,
-                    tasks: [...p.tasks, { ...task, id: Date.now(), completed: false, subtasks: [] }]
-                };
-            }
-            return p;
-        });
-        updateProjectProgress(updatedProjects);
-    };
-
-    const toggleTask = (projectId, taskId) => {
-        const updatedProjects = projects.map(p => {
-            if (p.id === projectId) {
-                const updatedTasks = p.tasks.map(t =>
-                    t.id === taskId ? { ...t, completed: !t.completed } : t
-                );
-                return { ...p, tasks: updatedTasks };
-            }
-            return p;
-        });
-        updateProjectProgress(updatedProjects);
-    };
-
-    const addSubtask = (projectId, taskId, subtaskText) => {
-        const updatedProjects = projects.map(p => {
-            if (p.id === projectId) {
-                const updatedTasks = p.tasks.map(t => {
-                    if (t.id === taskId) {
-                        return {
-                            ...t,
-                            subtasks: [...t.subtasks, { id: Date.now(), text: subtaskText, completed: false }]
-                        };
-                    }
-                    return t;
+    // Helper to join rooms
+    const joinProjectRoom = (projectId) => {
+        if (socket.current) {
+            if (socket.current.connected) {
+                socket.current.emit('join-project', projectId);
+            } else {
+                // If not connected, wait for connect event
+                socket.current.once('connect', () => {
+                    socket.current.emit('join-project', projectId);
                 });
-                return { ...p, tasks: updatedTasks };
             }
-            return p;
-        });
-        // Optional: Update main task completion based on subtasks? 
-        // For now, keep them independent or let user manually check main task.
-        setProjects(updatedProjects);
-        localStorage.setItem('projects', JSON.stringify(updatedProjects));
+        }
     };
 
-    const toggleSubtask = (projectId, taskId, subtaskId) => {
-        const updatedProjects = projects.map(p => {
+    const fetchProjects = async () => {
+        if (!user) {
+            setProjects([]);
+            return;
+        }
+        try {
+            const token = await getToken();
+
+            // Version Check to verify backend update
+            const vRes = await fetch("http://localhost:3000/api/public");
+            if (vRes.ok) {
+                const vData = await vRes.json();
+                console.log("🔍 Backend Version Check:", vData.version || "Unknown");
+            }
+
+            const res = await fetch("http://localhost:3000/api/projects", {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                console.log("📥 Projects fetched from backend:", data);
+                setProjects(data);
+            } else {
+                console.error("Failed to fetch projects", res.status);
+            }
+        } catch (error) {
+            console.error("Error fetching projects:", error);
+        }
+    };
+
+    useEffect(() => {
+        if (!loading) {
+            fetchProjects();
+        }
+    }, [user, loading]);
+
+    const [employees] = useState([]);
+
+    const addProject = async (project) => {
+        try {
+            const token = await getToken();
+            const res = await fetch("http://localhost:3000/api/projects", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    ...project,
+                    id: project.id || Date.now(),
+                    progress: project.progress || 0,
+                    tasks: project.tasks || [],
+                    chat: project.chat || []
+                })
+            });
+
+            if (res.ok) {
+                const savedProject = await res.json();
+                setProjects(prev => [...prev, savedProject]);
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error("Error adding project:", error);
+            return false;
+        }
+    };
+
+    const deleteProject = async (projectId) => {
+        try {
+            const token = await getToken();
+            const res = await fetch(`http://localhost:3000/api/projects/${projectId}`, {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            if (res.ok) {
+                setProjects(prev => prev.filter(p => p.id !== projectId));
+            }
+        } catch (error) {
+            console.error("Error deleting project:", error);
+        }
+    };
+
+    const addTask = async (projectId, task) => {
+        try {
+            const token = await getToken();
+            const newTask = { ...task, id: Date.now(), completed: false, subtasks: [] };
+            const res = await fetch(`http://localhost:3000/api/projects/${projectId}/tasks`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify(newTask)
+            });
+
+            if (res.ok) {
+                const updatedProject = await res.json();
+                setProjects(prev => prev.map(p => p.id === projectId ? updatedProject : p));
+            }
+        } catch (error) {
+            console.error("Error adding task:", error);
+        }
+    };
+
+    const toggleTask = async (projectId, taskId) => {
+        // Optimistic UI update
+        setProjects(prev => prev.map(p => {
+            if (p.id === projectId) {
+                const updatedTasks = p.tasks.map(t => t.id === taskId ? { ...t, completed: !t.completed } : t);
+                const progress = updatedTasks.length > 0 ? Math.round((updatedTasks.filter(t => t.completed).length / updatedTasks.length) * 100) : 0;
+                return { ...p, tasks: updatedTasks, progress };
+            }
+            return p;
+        }));
+
+        try {
+            const token = await getToken();
+            await fetch(`http://localhost:3000/api/projects/${projectId}/tasks/${taskId}`, {
+                method: "PUT",
+                headers: { Authorization: `Bearer ${token}` }
+            });
+        } catch (error) {
+            console.error("Error toggling task:", error);
+            fetchProjects(); // Revert on error
+        }
+    };
+
+    const addSubtask = async (projectId, taskId, subtaskText) => {
+        try {
+            const token = await getToken();
+            const newSubtask = { id: Date.now(), text: subtaskText, completed: false };
+            const res = await fetch(`http://localhost:3000/api/projects/${projectId}/tasks/${taskId}/subtasks`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify(newSubtask)
+            });
+
+            if (res.ok) {
+                const updatedProject = await res.json();
+                setProjects(prev => prev.map(p => p.id === projectId ? updatedProject : p));
+            }
+        } catch (error) {
+            console.error("Error adding subtask:", error);
+        }
+    };
+
+    const toggleSubtask = async (projectId, taskId, subtaskId) => {
+        // Optimistic UI Update
+        setProjects(prev => prev.map(p => {
             if (p.id === projectId) {
                 const updatedTasks = p.tasks.map(t => {
                     if (t.id === taskId) {
                         const updatedSubtasks = t.subtasks.map(st =>
                             st.id === subtaskId ? { ...st, completed: !st.completed } : st
                         );
-                        // Auto-complete parent task if all subtasks are done?
-                        // const allCompleted = updatedSubtasks.every(st => st.completed);
                         return { ...t, subtasks: updatedSubtasks };
                     }
                     return t;
@@ -158,24 +253,59 @@ export const ProjectProvider = ({ children }) => {
                 return { ...p, tasks: updatedTasks };
             }
             return p;
-        });
-        setProjects(updatedProjects);
-        localStorage.setItem('projects', JSON.stringify(updatedProjects));
+        }));
+
+        try {
+            const token = await getToken();
+            await fetch(`http://localhost:3000/api/projects/${projectId}/tasks/${taskId}/subtasks/${subtaskId}`, {
+                method: "PUT",
+                headers: { Authorization: `Bearer ${token}` }
+            });
+        } catch (error) {
+            console.error("Error toggling subtask:", error);
+            fetchProjects(); // Revert on failure
+        }
     };
 
-    const addMessage = (projectId, message) => {
-        const updatedProjects = projects.map(p => {
-            if (p.id === projectId) {
+    const addMessage = async (projectId, message) => {
+        const newMessage = { ...message, id: Date.now() };
+
+        // Optimistic Update
+        setProjects(prev => prev.map(p => {
+            if (Number(p.id) === Number(projectId)) {
                 const currentChat = p.chat || [];
-                return {
-                    ...p,
-                    chat: [...currentChat, { ...message, id: Date.now() }]
-                };
+                return { ...p, chat: [...currentChat, newMessage] };
             }
             return p;
-        });
-        setProjects(updatedProjects);
-        localStorage.setItem('projects', JSON.stringify(updatedProjects));
+        }));
+
+        try {
+            const token = await getToken();
+            // Refactored to emit via socket
+            try {
+                if (socket.current && socket.current.connected) {
+                    console.log(`📤 Emitting message via socket for project ${projectId}`);
+                    socket.current.emit('send-message', { projectId, message: newMessage });
+                } else {
+                    console.warn('⚠️ Socket not connected, message will only be saved to DB. Connected:', socket.current?.connected);
+                    // Socket not connected, message will only be saved to DB.
+                }
+            } catch (socketErr) {
+                console.error('❌ Failed to emit socket message:', socketErr);
+            }
+
+            await fetch(`http://localhost:3000/api/projects/${projectId}/chat`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify(newMessage)
+            });
+        } catch (error) {
+            console.error("❌ Error adding message:", error);
+            fetchProjects(); // re-sync if failed
+        }
     };
 
     const updateProjectProgress = (currentProjects) => {
@@ -190,28 +320,101 @@ export const ProjectProvider = ({ children }) => {
             progress: calculateProgress(p.tasks)
         }));
 
-        setProjects(finalProjects);
-        localStorage.setItem('projects', JSON.stringify(finalProjects));
+        saveProjects(finalProjects);
     }
 
-    const completeProject = (projectId) => {
-        const updatedProjects = projects.map(p => {
+    const completeProject = async (projectId) => {
+        // Find existing project to manually set progress to 100 on frontend immediately
+        setProjects(prev => prev.map(p => {
             if (p.id === projectId) {
-                return {
-                    ...p,
-                    status: 'Completed',
-                    progress: 100,
-                    tasks: p.tasks.map(t => ({ ...t, completed: true }))
-                };
+                return { ...p, progress: 100, tasks: p.tasks.map(t => ({ ...t, completed: true })) };
             }
             return p;
-        });
-        setProjects(updatedProjects);
-        localStorage.setItem('projects', JSON.stringify(updatedProjects));
+        }));
+
+        // Note: For a robust app we'd have a specific endpoint `PUT /api/projects/:id/complete` 
+        // that handles the mass task update, but as a shortcut we can hit existing task APIs 
+        // or just accept the local state will sync cleanly if tasks are properly implemented.
+        // For now to match previous functionality:
+        try {
+            const token = await getToken();
+            await fetch(`http://localhost:3000/api/projects/${projectId}/complete`, { // Assuming you create this endpoint
+                method: "PUT",
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            fetchProjects(); // Re-sync data after update
+        } catch (error) {
+            console.error("Error completing project:", error);
+        }
+    };
+
+    const joinProjectByLink = async (joinToken) => {
+        try {
+            const token = await getToken();
+            const res = await fetch(`http://localhost:3000/api/projects/join`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({ joinToken })
+            });
+
+            const data = await res.json();
+
+            if (data.success) {
+                fetchProjects(); // re-fetch to get the newly attached project
+                return { success: true, message: data.message };
+            } else {
+                return { success: false, message: data.error || data.message || 'Failed to join project' };
+            }
+
+        } catch (error) {
+            console.error("Error joining project:", error);
+            return { success: false, message: "An error occurred while joining the project" };
+        }
+    };
+
+    const saveProjectCode = async (projectId, workspace) => {
+        console.log(`📡 Attempting to save code for project ID: ${projectId}`);
+        try {
+            const token = await getToken();
+            const url = `http://localhost:3000/api/projects/${projectId}/workspace`;
+            console.log(`🔗 Sending PUT request to: ${url}`);
+
+            const res = await fetch(url, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({ workspace })
+            });
+
+            console.log(`📬 Save response status: ${res.status}`);
+
+            if (res.ok) {
+                const updatedProject = await res.json();
+                console.log("✅ Project workspace saved successfully");
+                setProjects(prev => prev.map(p => p.id === projectId ? updatedProject : p));
+                return true;
+            }
+            const errorData = await res.json();
+            console.error("❌ Save failed:", errorData);
+            return false;
+        } catch (error) {
+            console.error("❌ Error saving project code:", error);
+            return false;
+        }
     };
 
     return (
-        <ProjectContext.Provider value={{ projects, employees, addProject, deleteProject, completeProject, addTask, toggleTask, addSubtask, toggleSubtask, addMessage, searchQuery, setSearchQuery }}>
+        <ProjectContext.Provider value={{
+            projects, employees, addProject, deleteProject,
+            completeProject, addTask, toggleTask, addSubtask,
+            toggleSubtask, addMessage, searchQuery, setSearchQuery,
+            joinProjectByLink, saveProjectCode, joinProjectRoom
+        }}>
             {children}
         </ProjectContext.Provider>
     );

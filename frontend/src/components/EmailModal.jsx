@@ -1,130 +1,106 @@
 import React from 'react';
-import { motion } from 'framer-motion';
-import { X, Mail, MessageSquare, Send, Bell, Search, ChevronRight, User, Clock } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X, Bell, User, CheckCircle2, AlertCircle } from 'lucide-react';
+import { useNotifications } from '../context/NotificationContext';
+import { formatDistanceToNow } from 'date-fns';
 
 const EmailModal = ({ onClose, user }) => {
+    const { notifications, unreadCount, markAllAsRead } = useNotifications();
     if (!user) return null;
 
-    const messages = [
-        { id: 1, sender: 'Sarah Connor', subject: 'Project Milestone Update', time: '2m ago', preview: 'The new design tokens are ready for review. Please check the...', unread: true },
-        { id: 2, sender: 'James Maxwell', subject: 'Budget Approval Required', time: '1h ago', preview: 'I have attached the revised budget for the Q3 marketing...', unread: true },
-        { id: 3, sender: 'Emily Watson', subject: 'Team Sync Tomorrow', time: '4h ago', preview: 'Just a reminder that we have our weekly sync at 10 AM...', unread: false },
-        { id: 4, sender: 'Digital Studio', subject: 'New Asset Delivered', time: 'Yesterday', preview: 'Your high-fidelity prototypes are now available in the...', unread: false },
-    ];
+    const getIcon = (type) => {
+        switch (type) {
+            case 'invite': return <User size={16} className="text-primary-600" />;
+            case 'assignment': return <CheckCircle2 size={16} className="text-primary-600" />;
+            case 'system': return <AlertCircle size={16} className="text-slate-500" />;
+            default: return <Bell size={16} className="text-primary-600" />;
+        }
+    };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex justify-end p-4 sm:p-6 items-start">
             {/* Backdrop */}
             <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={onClose}
-                className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
+                className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm"
             />
 
-            {/* Modal Content - Horizontal Rectangular Box */}
+            {/* Notification Panel - Small & Minimal */}
             <motion.div
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                transition={{
-                    type: "spring",
-                    stiffness: 300,
-                    damping: 25
-                }}
-                className="relative w-full max-w-5xl h-[520px] bg-white rounded-[40px] shadow-[0_32px_128px_-16px_rgba(0,0,0,0.3)] border border-white/20 overflow-hidden flex flex-row"
+                initial={{ opacity: 0, scale: 0.95, y: -20, x: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0, x: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: -20, x: 20 }}
+                transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                className="relative w-full max-w-sm bg-white rounded-3xl shadow-2xl border border-slate-200 mt-14 overflow-hidden flex flex-col"
             >
-                {/* Left Side: Navigation & Folders */}
-                <div className="w-[30%] bg-slate-50 border-r border-slate-100 p-8 flex flex-col shrink-0">
-                    <div className="flex items-center gap-3 mb-10">
-                        <div className="p-2.5 bg-red-500 text-white rounded-2xl shadow-lg shadow-red-200">
-                            <Bell size={24} />
+                {/* Header */}
+                <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-primary-100/50 text-primary-600 rounded-xl relative">
+                            <Bell size={20} />
+                            {unreadCount > 0 && (
+                                <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full border-2 border-white"></span>
+                            )}
                         </div>
-                        <h2 className="text-xl font-black text-slate-800 tracking-tight">Notifications</h2>
+                        <h2 className="text-lg font-bold text-slate-900 tracking-tight">Notifications</h2>
                     </div>
-
-                    <div className="space-y-2 flex-1">
-                        {[
-                            { icon: Mail, label: 'Inbox', count: 12, active: true },
-                            { icon: Send, label: 'Sent', count: 0, active: false },
-                            { icon: Clock, label: 'Snoozed', count: 2, active: false },
-                            { icon: Bell, label: 'Alerts', count: 5, active: false }
-                        ].map((item, i) => (
-                            <button
-                                key={i}
-                                className={`w-full flex items-center justify-between p-4 rounded-2xl transition-all ${item.active ? 'bg-white shadow-sm border border-slate-100 text-emerald-600' : 'text-slate-500 hover:bg-white/50 hover:text-slate-800'}`}
-                            >
-                                <div className="flex items-center gap-3">
-                                    <item.icon size={18} />
-                                    <span className="font-bold text-sm tracking-tight">{item.label}</span>
-                                </div>
-                                {item.count > 0 && (
-                                    <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black ${item.active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>
-                                        {item.count}
-                                    </span>
-                                )}
-                            </button>
-                        ))}
-                    </div>
-
-                    <button className="mt-auto w-full py-4 bg-emerald-600 text-white font-black rounded-2xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 flex items-center justify-center gap-2">
-                        <MessageSquare size={18} />
-                        <span>New Message</span>
+                    <button
+                        onClick={onClose}
+                        className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+                    >
+                        <X size={20} />
                     </button>
                 </div>
 
-                {/* Right Side: Message List */}
-                <div className="flex-1 p-8 bg-white flex flex-col relative overflow-hidden">
-                    <button
-                        onClick={onClose}
-                        className="absolute top-8 right-8 p-3 bg-slate-50 hover:bg-slate-100 rounded-full text-slate-400 transition-all active:scale-95 group/close z-20"
-                    >
-                        <X size={24} className="group-hover/close:rotate-90 transition-transform duration-300" />
-                    </button>
-
-                    <div className="flex items-center justify-between mb-8 pr-12">
-                        <div className="relative w-full max-w-sm">
-                            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                            <input
-                                type="text"
-                                placeholder="Search in messages..."
-                                className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-4">
-                        {messages.map((msg) => (
+                {/* Notification List */}
+                <div className="flex-1 overflow-y-auto max-h-[400px] custom-scrollbar p-3 space-y-1">
+                    {notifications.length > 0 ? (
+                        notifications.map((notif) => (
                             <motion.div
-                                key={msg.id}
-                                whileHover={{ x: 5, backgroundColor: '#f8fafc' }}
-                                className={`p-5 rounded-3xl border transition-all cursor-pointer group ${msg.unread ? 'bg-emerald-50/30 border-emerald-100 shadow-sm' : 'bg-white border-slate-100 hover:border-emerald-200'}`}
+                                key={notif._id || notif.id}
+                                whileHover={{ scale: 0.98 }}
+                                className={`relative p-4 rounded-2xl cursor-pointer transition-colors ${notif.unread ? 'bg-primary-50/50 hover:bg-primary-50' : 'bg-transparent hover:bg-slate-50'}`}
                             >
-                                <div className="flex items-center justify-between mb-2">
-                                    <div className="flex items-center gap-3">
-                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${msg.unread ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                                            <User size={18} />
-                                        </div>
-                                        <div>
-                                            <h4 className="font-black text-slate-800 tracking-tight text-sm">{msg.sender}</h4>
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{msg.time}</p>
-                                        </div>
+                                {notif.unread && (
+                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-primary-600"></div>
+                                )}
+                                <div className={`flex gap-3 items-start ${notif.unread ? 'pl-3' : ''}`}>
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 border border-white shadow-sm ${notif.unread ? 'bg-white' : 'bg-slate-100'}`}>
+                                        {getIcon(notif.type)}
                                     </div>
-                                    {msg.unread && <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm animate-pulse"></div>}
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm text-slate-600 leading-snug">
+                                            <span className="font-bold text-slate-900">{notif.sender}</span> {notif.text}
+                                        </p>
+                                        <p className="text-xs font-medium text-slate-400 mt-1">
+                                            {notif.createdAt ? formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true }) : notif.time}
+                                        </p>
+                                    </div>
                                 </div>
-                                <h5 className="font-extrabold text-slate-700 text-sm mb-1 group-hover:text-emerald-700 transition-colors">{msg.subject}</h5>
-                                <p className="text-xs text-slate-500 leading-relaxed truncate">{msg.preview}</p>
                             </motion.div>
-                        ))}
-                    </div>
+                        ))
+                    ) : (
+                        <div className="py-12 px-6 flex flex-col items-center justify-center text-center">
+                            <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-3">
+                                <Bell size={24} className="text-slate-300" />
+                            </div>
+                            <h3 className="text-sm font-bold text-slate-700">All caught up!</h3>
+                            <p className="text-xs text-slate-500 mt-1">Check back later for new notifications.</p>
+                        </div>
+                    )}
+                </div>
 
-                    <div className="mt-6 text-center">
-                        <button className="text-sm font-black text-emerald-600 hover:text-emerald-700 transition-colors inline-flex items-center gap-1 group">
-                            <span>View all messages in Archive</span>
-                            <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" />
-                        </button>
-                    </div>
+                {/* Footer Action */}
+                <div className="p-3 border-t border-slate-100 bg-slate-50/30 text-center">
+                    <button
+                        onClick={markAllAsRead}
+                        className="text-xs font-bold text-primary-600 hover:text-primary-700 transition-colors px-4 py-2 rounded-xl hover:bg-primary-50"
+                    >
+                        Mark all as read
+                    </button>
                 </div>
             </motion.div>
         </div>

@@ -1,7 +1,8 @@
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useProjects } from '../context/ProjectContext';
-import { LayoutDashboard, CheckSquare, LogOut, User, Menu, X, Users, MessageSquare, CheckCircle2, Search, Bell, Layout as AppLogo } from 'lucide-react';
+import { useNotifications } from '../context/NotificationContext';
+import { LayoutDashboard, CheckSquare, LogOut, User, Menu, X, Users, MessageSquare, CheckCircle2, Search, Bell, Layout as AppLogo, Terminal, Folder } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { fadeIn } from '../utils/animations';
@@ -13,6 +14,7 @@ import EmailModal from './EmailModal';
 const Layout = ({ children }) => {
     const { user, logout } = useAuth();
     const { searchQuery, setSearchQuery } = useProjects();
+    const { unreadCount } = useNotifications();
     const navigate = useNavigate();
     const location = useLocation();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -26,18 +28,14 @@ const Layout = ({ children }) => {
         if (timeoutRef.current) {
             clearTimeout(timeoutRef.current);
         }
-        timeoutRef.current = setTimeout(() => {
-            setIsSidebarHovered(true);
-        }, 500);
+        setIsSidebarHovered(true);
     };
 
     const handleMouseLeave = () => {
         if (timeoutRef.current) {
             clearTimeout(timeoutRef.current);
         }
-        timeoutRef.current = setTimeout(() => {
-            setIsSidebarHovered(false);
-        }, 500);
+        setIsSidebarHovered(false);
     };
 
     useEffect(() => {
@@ -55,9 +53,9 @@ const Layout = ({ children }) => {
 
     const navItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-        { icon: CheckCircle2, label: 'Workspace', path: '/workspaces' },
+        { icon: Folder, label: 'Projects', path: '/projects' },
+        { icon: Terminal, label: 'Workspace', path: '/workspaces' },
         { icon: MessageSquare, label: 'Messages', path: '/messages' },
-        { icon: CheckSquare, label: 'Completed', path: '/completed' },
         { icon: Users, label: 'Members', path: '/team' },
     ];
 
@@ -98,7 +96,9 @@ const Layout = ({ children }) => {
                         className="p-2.5 text-slate-500 hover:bg-slate-50 hover:text-primary-600 rounded-xl transition-all relative border border-transparent hover:border-slate-200"
                     >
                         <Bell size={20} />
-                        <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+                        {unreadCount > 0 && (
+                            <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-white"></span>
+                        )}
                     </button>
                     <motion.button
                         layoutId="profile-pop"
@@ -132,7 +132,7 @@ const Layout = ({ children }) => {
                 <motion.aside
                     initial={{ width: 68 }}
                     animate={{ width: isSidebarHovered ? 240 : 68 }}
-                    transition={{ type: "spring", stiffness: 100, damping: 20 }}
+                    transition={{ duration: 0.3, ease: "easeInOut" }}
                     className="hidden md:flex flex-col h-full bg-white border-r border-slate-200 overflow-hidden relative z-20"
                     onMouseEnter={handleMouseEnter}
                     onMouseLeave={handleMouseLeave}

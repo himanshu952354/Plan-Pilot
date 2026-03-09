@@ -4,14 +4,31 @@ import dotenv from 'dotenv';
 import { clerkMiddleware, requireAuth } from '@clerk/express';
 import mongoose from 'mongoose';
 import User from './models/User.js';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import projectRoutes from './routes/projectRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
 
 dotenv.config();
 
 const app = express();
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+    cors: {
+        origin: ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"],
+        methods: ["GET", "POST", "PUT", "DELETE"],
+        credentials: true
+    }
+});
+
+console.log('🚀 Socket.io server initialized');
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors({ origin: 'http://localhost:5173' })); // Allow frontend requests
+app.use(cors({
+    origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
+    credentials: true
+}));
 app.use(express.json());
 
 // Connect to MongoDB
@@ -29,7 +46,7 @@ app.use(clerkMiddleware());
 
 // Public route that anyone can access
 app.get('/api/public', (req, res) => {
-    res.json({ message: "This is a public endpoint. Anyone can see it." });
+    res.json({ message: "This is a public endpoint. Anyone can see it.", version: "1.2.0-socket-debug" });
 });
 
 // Protected route that requires a valid Clerk token
@@ -42,6 +59,10 @@ app.get('/api/protected', requireAuth(), (req, res) => {
         userId: userId
     });
 });
+
+// Use the newly created routes
+app.use('/api/projects', projectRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Sync endpoint: called by the frontend upon login to ensure MongoDB has the user
 app.post('/api/users/sync', requireAuth(), async (req, res) => {
@@ -78,6 +99,9 @@ app.post('/api/users/sync', requireAuth(), async (req, res) => {
     }
 });
 
+// Add the project routes
+app.use('/api/projects', requireAuth(), projectRoutes);
+
 // Add a fallback error handler for Clerk
 app.use((err, req, res, next) => {
     console.error("🔴 Global Error Handler Caught:", err.message);
@@ -91,6 +115,40 @@ app.use((err, req, res, next) => {
     res.status(500).send('Internal Server Error!');
 });
 
-app.listen(PORT, () => {
+// Socket.io Logic
+io.on('connection', (socket) => {
+    console.log(`🔌 Socket connected: ${socket.id}`);
+
+    // Diagnostic ping
+    socket.on('ping-test', () => {
+        socket.emit('pong-test', { time: new Date().toISOString() });
+    });
+
+    socket.on('join-project', (projectId) => {
+        const roomName = `project-${projectId}`;
+        socket.join(roomName);
+        console.log(`👥 Socket ${socket.id} joined room: ${roomName}`);
+
+        // Confirm join to client (optional but good for debug)
+        socket.emit('joined-room', { room: roomName });
+    });
+
+    socket.on('send-message', (data) => {
+        const { projectId, message } = data;
+        const roomName = `project-${projectId}`;
+
+        console.log(`📩 Received message from ${socket.id} for room ${roomName}:`, message.text);
+
+        // Broadcast to everyone in the project room
+        io.to(roomName).emit('new-message', { projectId, message });
+        console.log(`📣 Broadcasted message to room ${roomName}`);
+    });
+
+    socket.on('disconnect', () => {
+        console.log('🔌 Client disconnected:', socket.id);
+    });
+});
+
+httpServer.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });

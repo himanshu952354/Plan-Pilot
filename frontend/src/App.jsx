@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ProjectProvider } from './context/ProjectContext';
+import { NotificationProvider } from './context/NotificationContext';
 import Layout from './components/Layout';
 import PrivateRoute from './components/PrivateRoute';
 import LandingPage from './pages/LandingPage';
@@ -14,6 +15,7 @@ import CompletedProjects from './pages/CompletedProjects';
 import Messages from './pages/Messages';
 import Team from './pages/Team';
 import Docs from './pages/Docs';
+import Projects from './pages/Projects';
 import AOS from 'aos';
 import 'aos/dist/aos.css';
 
@@ -49,24 +51,26 @@ function App() {
         }}
       >
         <AuthProvider>
-          <ProjectProvider>
-            <Routes>
-              <Route path="/" element={<LandingPage />} />
-              <Route path="/docs" element={<Docs />} />
+          <NotificationProvider>
+            <ProjectProvider>
+              <Routes>
+                <Route path="/" element={<LandingPage />} />
+                <Route path="/docs" element={<Docs />} />
 
-              <Route element={<PrivateRoute />}>
-                <Route element={<Layout><Dashboard /></Layout>} path="/dashboard" />
-                <Route element={<Layout><WorkspaceSelect /></Layout>} path="/workspaces" />
-                <Route element={<CodeWorkspace />} path="/project/:id" />
-                <Route element={<Layout><ProjectInfo /></Layout>} path="/project/:id/details" />
-                <Route element={<Layout><CompletedProjects /></Layout>} path="/completed" />
-                <Route element={<Layout><Messages /></Layout>} path="/messages" />
-                <Route element={<Layout><Team /></Layout>} path="/team" />
-              </Route>
+                <Route element={<PrivateRoute />}>
+                  <Route element={<Layout><Dashboard /></Layout>} path="/dashboard" />
+                  <Route element={<Layout><Projects /></Layout>} path="/projects" />
+                  <Route element={<Layout><WorkspaceSelect /></Layout>} path="/workspaces" />
+                  <Route element={<CodeWorkspace />} path="/project/:id" />
+                  <Route element={<Layout><ProjectInfo /></Layout>} path="/project/:id/details" />
+                  <Route element={<Layout><Messages /></Layout>} path="/messages" />
+                  <Route element={<Layout><Team /></Layout>} path="/team" />
+                </Route>
 
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </ProjectProvider>
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </ProjectProvider>
+          </NotificationProvider>
         </AuthProvider>
       </ClerkProvider>
     </Router>

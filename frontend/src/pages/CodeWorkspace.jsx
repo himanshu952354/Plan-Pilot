@@ -1,23 +1,26 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import {
     Folder, FileCode, Search, Settings,
-    ChevronRight, ChevronDown, Plus, X,
-    Play, Save, Share2, Users
+    ChevronDown, Plus, X,
+    Play, Save, Share2, Users, Loader2, ChevronRight
 } from 'lucide-react';
 import { useProjects } from '../context/ProjectContext';
+import { useToast } from '../context/ToastContext';
 import TaskBoard from '../components/TaskBoard';
 
 const CodeWorkspace = () => {
     const { id } = useParams();
     const navigate = useNavigate();
-    const { projects } = useProjects();
+    const { projects, saveProjectCode } = useProjects();
+    const { addToast } = useToast();
     const project = projects.find(p => p.id === parseInt(id));
 
     const [activeTab, setActiveTab] = useState('code'); // 'code' | 'tasks'
+    const [isSaving, setIsSaving] = useState(false);
 
-    const [files, setFiles] = useState({
+    const defaultFiles = {
         'App.jsx': {
             name: 'App.jsx',
             language: 'javascript',
@@ -33,10 +36,31 @@ const CodeWorkspace = () => {
             language: 'javascript',
             content: `export const formatDate = (date) => {\n  return new Date(date).toLocaleDateString();\n};`
         }
-    });
+    };
+
+    const [files, setFiles] = useState(defaultFiles);
+
+    // Load files from project workspace if they exist
+    useEffect(() => {
+        if (project?.workspace && Object.keys(project.workspace).length > 0) {
+            setFiles(project.workspace);
+        }
+    }, [project?.id]);
 
     const [activeFile, setActiveFile] = useState('App.jsx');
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+    const handleSave = async () => {
+        if (!project) return;
+        setIsSaving(true);
+        const success = await saveProjectCode(project.id, files);
+        setIsSaving(false);
+        if (success) {
+            addToast('Project code saved successfully!', 'success');
+        } else {
+            addToast('Failed to save project code.', 'error');
+        }
+    };
 
     if (!project) return <div className="text-center text-white pt-20">Project not found</div>;
 
@@ -121,10 +145,18 @@ const CodeWorkspace = () => {
                                 <Plus size={12} />
                             </button>
                         </div>
+                        <button
+                            onClick={handleSave}
+                            disabled={isSaving}
+                            className={`p-1.5 flex items-center gap-2 px-3 rounded text-sm font-medium transition-all ${isSaving ? 'bg-slate-700 text-slate-400 cursor-not-allowed' : 'bg-primary-600 text-white hover:bg-primary-500'}`}
+                        >
+                            {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                            {isSaving ? 'Saving...' : 'Save'}
+                        </button>
                         <button className="p-1.5 bg-green-700 text-white rounded hover:bg-green-600 transition-colors">
                             <Play size={16} />
                         </button>
-                        <button className="p-1.5 bg-primary-600 text-white rounded hover:bg-primary-500 transition-colors">
+                        <button className="p-1.5 bg-slate-700 text-white rounded hover:bg-slate-600 transition-colors">
                             <Share2 size={16} />
                         </button>
                     </div>
