@@ -41,6 +41,8 @@ function App() {
     <Router>
       <ClerkProvider
         publishableKey={PUBLISHABLE_KEY}
+        afterSignInUrl="/dashboard"
+        afterSignUpUrl="/dashboard"
         appearance={{
           variables: {
             colorPrimary: '#059669', // Match primary-600
