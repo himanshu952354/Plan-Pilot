@@ -11,29 +11,50 @@ import notificationRoutes from './routes/notificationRoutes.js';
 
 dotenv.config();
 
-const allowedOrigins = ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"];
-if (process.env.FRONTEND_URL) {
-    allowedOrigins.push(process.env.FRONTEND_URL);
-}
+const getAllowedOrigins = () => {
+    const origins = ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"];
+    if (process.env.FRONTEND_URL) {
+        // Split by comma if multiple URLs, and trim whitespace/trailing slashes
+        const envOrigins = process.env.FRONTEND_URL.split(',').map(url => url.trim().replace(/\/$/, ""));
+        origins.push(...envOrigins);
+    }
+    return origins;
+};
+
+const allowedOrigins = getAllowedOrigins();
+console.log('🌐 Configured Allowed Origins:', allowedOrigins);
 
 const app = express();
 const httpServer = createServer(app);
+
+const corsOptions = {
+    origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+
+        // Check if origin (normalized) is in allowedOrigins
+        const normalizedOrigin = origin.replace(/\/$/, "");
+        if (allowedOrigins.includes(normalizedOrigin)) {
+            callback(null, true);
+        } else {
+            console.error(`❌ CORS blocked for origin: ${origin}`);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
+};
+
 const io = new Server(httpServer, {
-    cors: {
-        origin: allowedOrigins,
-        methods: ["GET", "POST", "PUT", "DELETE"],
-        credentials: true
-    }
+    cors: corsOptions
 });
 
 console.log('🚀 Socket.io server initialized');
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors({
-    origin: allowedOrigins,
-    credentials: true
-}));
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Connect to MongoDB
