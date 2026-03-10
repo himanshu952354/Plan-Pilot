@@ -31,7 +31,8 @@ const Dashboard = () => {
             try {
                 const token = await getToken();
 
-                const response = await fetch('http://localhost:3000/api/protected', {
+                const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+                const response = await fetch(`${apiUrl}/api/protected`, {
                     headers: {
                         'Authorization': `Bearer ${token}`
                     }

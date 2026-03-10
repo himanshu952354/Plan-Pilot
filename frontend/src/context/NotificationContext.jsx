@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
 const NotificationContext = createContext();
 
 export const useNotifications = () => useContext(NotificationContext);
@@ -16,7 +18,7 @@ export const NotificationProvider = ({ children }) => {
         }
         try {
             const token = await getToken();
-            const res = await fetch("http://localhost:3000/api/notifications", {
+            const res = await fetch(`${API_URL}/api/notifications`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (res.ok) {
@@ -40,7 +42,7 @@ export const NotificationProvider = ({ children }) => {
 
         try {
             const token = await getToken();
-            await fetch("http://localhost:3000/api/notifications/read", {
+            await fetch(`${API_URL}/api/notifications/read`, {
                 method: "PUT",
                 headers: { Authorization: `Bearer ${token}` }
             });

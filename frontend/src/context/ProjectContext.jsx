@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import { io } from 'socket.io-client';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 const ProjectContext = createContext();
 
@@ -14,8 +15,8 @@ export const ProjectProvider = ({ children }) => {
 
     // Initialize Socket
     useEffect(() => {
-        console.log('🔌 Initializing Socket.io connection to http://localhost:3000');
-        socket.current = io("http://localhost:3000", {
+        console.log(`🔌 Initializing Socket.io connection to ${API_URL}`);
+        socket.current = io(API_URL, {
             reconnectionAttempts: 10,
             transports: ['polling', 'websocket']
         });
@@ -95,13 +96,13 @@ export const ProjectProvider = ({ children }) => {
             const token = await getToken();
 
             // Version Check to verify backend update
-            const vRes = await fetch("http://localhost:3000/api/public");
+            const vRes = await fetch(`${API_URL}/api/public`);
             if (vRes.ok) {
                 const vData = await vRes.json();
                 console.log("🔍 Backend Version Check:", vData.version || "Unknown");
             }
 
-            const res = await fetch("http://localhost:3000/api/projects", {
+            const res = await fetch(`${API_URL}/api/projects`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (res.ok) {
@@ -127,7 +128,7 @@ export const ProjectProvider = ({ children }) => {
     const addProject = async (project) => {
         try {
             const token = await getToken();
-            const res = await fetch("http://localhost:3000/api/projects", {
+            const res = await fetch(`${API_URL}/api/projects`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -157,7 +158,7 @@ export const ProjectProvider = ({ children }) => {
     const deleteProject = async (projectId) => {
         try {
             const token = await getToken();
-            const res = await fetch(`http://localhost:3000/api/projects/${projectId}`, {
+            const res = await fetch(`${API_URL}/api/projects/${projectId}`, {
                 method: "DELETE",
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -174,7 +175,7 @@ export const ProjectProvider = ({ children }) => {
         try {
             const token = await getToken();
             const newTask = { ...task, id: Date.now(), completed: false, subtasks: [] };
-            const res = await fetch(`http://localhost:3000/api/projects/${projectId}/tasks`, {
+            const res = await fetch(`${API_URL}/api/projects/${projectId}/tasks`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -205,7 +206,7 @@ export const ProjectProvider = ({ children }) => {
 
         try {
             const token = await getToken();
-            await fetch(`http://localhost:3000/api/projects/${projectId}/tasks/${taskId}`, {
+            await fetch(`${API_URL}/api/projects/${projectId}/tasks/${taskId}`, {
                 method: "PUT",
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -219,7 +220,7 @@ export const ProjectProvider = ({ children }) => {
         try {
             const token = await getToken();
             const newSubtask = { id: Date.now(), text: subtaskText, completed: false };
-            const res = await fetch(`http://localhost:3000/api/projects/${projectId}/tasks/${taskId}/subtasks`, {
+            const res = await fetch(`${API_URL}/api/projects/${projectId}/tasks/${taskId}/subtasks`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -257,7 +258,7 @@ export const ProjectProvider = ({ children }) => {
 
         try {
             const token = await getToken();
-            await fetch(`http://localhost:3000/api/projects/${projectId}/tasks/${taskId}/subtasks/${subtaskId}`, {
+            await fetch(`${API_URL}/api/projects/${projectId}/tasks/${taskId}/subtasks/${subtaskId}`, {
                 method: "PUT",
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -294,7 +295,7 @@ export const ProjectProvider = ({ children }) => {
                 console.error('❌ Failed to emit socket message:', socketErr);
             }
 
-            await fetch(`http://localhost:3000/api/projects/${projectId}/chat`, {
+            await fetch(`${API_URL}/api/projects/${projectId}/chat`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -338,7 +339,7 @@ export const ProjectProvider = ({ children }) => {
         // For now to match previous functionality:
         try {
             const token = await getToken();
-            await fetch(`http://localhost:3000/api/projects/${projectId}/complete`, { // Assuming you create this endpoint
+            await fetch(`${API_URL}/api/projects/${projectId}/complete`, { // Assuming you create this endpoint
                 method: "PUT",
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -351,7 +352,7 @@ export const ProjectProvider = ({ children }) => {
     const joinProjectByLink = async (joinToken) => {
         try {
             const token = await getToken();
-            const res = await fetch(`http://localhost:3000/api/projects/join`, {
+            const res = await fetch(`${API_URL}/api/projects/join`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -379,7 +380,7 @@ export const ProjectProvider = ({ children }) => {
         console.log(`📡 Attempting to save code for project ID: ${projectId}`);
         try {
             const token = await getToken();
-            const url = `http://localhost:3000/api/projects/${projectId}/workspace`;
+            const url = `${API_URL}/api/projects/${projectId}/workspace`;
             console.log(`🔗 Sending PUT request to: ${url}`);
 
             const res = await fetch(url, {
