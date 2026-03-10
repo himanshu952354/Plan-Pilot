@@ -23,8 +23,8 @@ export const AuthProvider = ({ children }) => {
                 }
                 const token = await session.getToken();
                 console.log('🔑 Token acquired:', token ? 'Yes (length: ' + token.length + ')' : 'No');
-
-                const response = await fetch('http://localhost:3000/api/users/sync', {
+                const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+                const response = await fetch(`${API_URL}/api/users/sync`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
